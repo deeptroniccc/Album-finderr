@@ -19,9 +19,9 @@ async function getSpotifyToken() {
   return data.access_token;
 }
 
-async function searchSpotifyAlbums(artist, token) {
+async function getArtistId(artist, token) {
   const res = await fetch(
-    `https://api.spotify.com/v1/search?q=${encodeURIComponent(artist)}&type=album&limit=10`,
+    `https://api.spotify.com/v1/search?q=${encodeURIComponent(artist)}&type=artist&limit=1`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -29,7 +29,21 @@ async function searchSpotifyAlbums(artist, token) {
     }
   );
   const data = await res.json();
-  return data.albums.items;
+  if (data.artists.items.length === 0) return null;
+  return data.artists.items[0].id;
+}
+
+async function getAlbumsByArtistId(artistId, token) {
+  const res = await fetch(
+    `https://api.spotify.com/v1/artists/${artistId}/albums?include_groups=album&limit=20`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+  const data = await res.json();
+  return data.items;
 }
 
 function App() {
@@ -49,11 +63,25 @@ function App() {
     setLoading(true);
     try {
       const token = await getSpotifyToken();
-      const results = await searchSpotifyAlbums(artist, token);
-      if (!results || results.length === 0) {
+      const artistId = await getArtistId(artist, token);
+      if (!artistId) {
+        setError('Artist not found.');
+        setLoading(false);
+        return;
+      }
+      const results = await getAlbumsByArtistId(artistId, token);
+      // Only show albums where the first artist matches the searched artist (case-insensitive)
+      const filtered = results.filter(
+        (album) =>
+          album.album_type === 'album' &&
+          album.artists &&
+          album.artists[0] &&
+          album.artists[0].name.toLowerCase() === artist.trim().toLowerCase()
+      );
+      if (!filtered || filtered.length === 0) {
         setError('No albums found.');
       } else {
-        setAlbums(results);
+        setAlbums(filtered);
       }
     } catch (err) {
       setError('Failed to fetch albums.');
@@ -263,3 +291,4 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 );
 
 document.title = 'Album Finder';
+
